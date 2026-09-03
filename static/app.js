@@ -120,7 +120,7 @@ function updateGreeting(){
  if(h>=5 && h<12){greeting='Good morning'; eyebrow='♡ A FRESH START FOR TODAY';}
  else if(h>=12 && h<17){greeting='Good afternoon'; eyebrow='♡ YOUR LITTLE WORK HELPER';}
  else if(h>=17 && h<21){greeting='Good evening'; eyebrow='♡ YOUR LITTLE WORK HELPER';}
- else {greeting='Good night'; eyebrow='♡ WINDING DOWN WITH MIMI Baby Studio';}
+ else {greeting='Good night'; eyebrow='♡ WINDING DOWN WITH MIMI Baby';}
  const g=$('#greetingText'); if(g)g.textContent=greeting;
  const e=$('#welcomeEyebrow'); if(e)e.textContent=eyebrow;
 }
