@@ -257,3 +257,22 @@ serverStatus?.addEventListener('click',()=>{
 });
 checkServerStatus();
 setInterval(checkServerStatus,5000);
+
+// Soft UI click feedback. Kept deliberately short and quiet so it adds polish
+// without becoming distracting during normal work.
+const mimiClickSound = new Audio('/static/audio/mimi-click-soft.wav');
+mimiClickSound.preload = 'auto';
+mimiClickSound.volume = 0.22;
+let mimiLastClickAt = 0;
+function playMimiClick(){
+  const now=performance.now();
+  if(now-mimiLastClickAt<45)return;
+  mimiLastClickAt=now;
+  try{mimiClickSound.currentTime=0; const p=mimiClickSound.play(); if(p?.catch)p.catch(()=>{});}catch(_){ }
+}
+document.addEventListener('click',e=>{
+  const t=e.target?.closest?.('button,a,select,input[type="checkbox"],input[type="radio"],.drop-zone,.theme-card');
+  if(!t)return;
+  if(t.matches('input[type="range"],input[type="file"]'))return;
+  playMimiClick();
+},true);
