@@ -174,6 +174,9 @@ if not exist "%INSTALL_DIR%\temp" mkdir "%INSTALL_DIR%\temp"
 :: 5. Launcher protocol + Windows startup
  echo [5/6] Registering background launcher...
 set "VBS=%INSTALL_DIR%\launch_silent.vbs"
+
+:: Remove stale startup shortcuts from older MIMI/Video-to-PDF installs.
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$startup=[Environment]::GetFolderPath('Startup'); $ws=New-Object -ComObject WScript.Shell; Get-ChildItem -LiteralPath $startup -Filter '*.lnk' -File -ErrorAction SilentlyContinue | ForEach-Object { try { $s=$ws.CreateShortcut($_.FullName); $t=[string]$s.TargetPath; $a=[string]$s.Arguments; if(($t -match '(?i)wscript(\.exe)?$' -and $a -match '(?i)launch_silent\.vbs') -or $t -match '(?i)Video-to-PDF|MIMI Baby Studio') { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue } } catch {} }" >nul 2>&1
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$k='HKCU:\Software\Classes\mimibaby'; $v='%VBS%'; New-Item -Path $k -Force | Out-Null; New-ItemProperty -Path $k -Name '(Default)' -Value 'URL:MIMI Baby Studio Launcher' -Force | Out-Null; New-ItemProperty -Path $k -Name 'URL Protocol' -Value '' -Force | Out-Null; New-Item -Path ($k+'\shell\open\command') -Force | Out-Null; New-ItemProperty -Path ($k+'\shell\open\command') -Name '(Default)' -Value ('wscript.exe ' + [char]34 + $v + [char]34) -Force | Out-Null" >nul 2>&1
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$startup=[Environment]::GetFolderPath('Startup'); $w=New-Object -ComObject WScript.Shell; $s=$w.CreateShortcut((Join-Path $startup 'MIMI Baby Studio.lnk')); $s.TargetPath='wscript.exe'; $s.Arguments=([char]34)+'%VBS%'+[char]34; $s.WorkingDirectory='%INSTALL_DIR%'; $s.IconLocation='%SystemRoot%\System32\SHELL32.dll,70'; $s.Save()" >nul 2>&1
 
