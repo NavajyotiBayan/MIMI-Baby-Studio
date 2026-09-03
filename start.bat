@@ -175,10 +175,18 @@ if not exist "%INSTALL_DIR%\temp" mkdir "%INSTALL_DIR%\temp"
  echo [5/6] Registering background launcher...
 set "VBS=%INSTALL_DIR%\launch_silent.vbs"
 
-:: Remove stale startup shortcuts from older MIMI/Video-to-PDF installs.
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$startup=[Environment]::GetFolderPath('Startup'); $ws=New-Object -ComObject WScript.Shell; Get-ChildItem -LiteralPath $startup -Filter '*.lnk' -File -ErrorAction SilentlyContinue | ForEach-Object { try { $s=$ws.CreateShortcut($_.FullName); $t=[string]$s.TargetPath; $a=[string]$s.Arguments; if(($t -match '(?i)wscript(\.exe)?$' -and $a -match '(?i)launch_silent\.vbs') -or $t -match '(?i)Video-to-PDF|MIMI Baby Studio') { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue } } catch {} }" >nul 2>&1
+:: Remove legacy Startup-folder entries created by older releases.
+:: New releases use Task Scheduler instead, so Windows never launches
+:: start.bat/cmd.exe during logon and no terminal window can flash.
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$startup=[Environment]::GetFolderPath('Startup'); $ws=New-Object -ComObject WScript.Shell; Get-ChildItem -LiteralPath $startup -File -ErrorAction SilentlyContinue | ForEach-Object { try { if($_.Name -match '(?i)MIMI|Video-to-PDF') { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue; return }; if($_.Extension -eq '.lnk') { $s=$ws.CreateShortcut($_.FullName); $t=[string]$s.TargetPath; $a=[string]$s.Arguments; if((($t -match '(?i)wscript|cscript|cmd|powershell|start\.bat|launch_silent\.vbs') -and (($a -match '(?i)launch_silent\.vbs') -or ($a -match '(?i)start\.bat'))) -or $t -match '(?i)Video-to-PDF|MIMI') { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue } } } catch {} }" >nul 2>&1
+
+:: Register the mimibaby://start protocol.
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$k='HKCU:\Software\Classes\mimibaby'; $v='%VBS%'; New-Item -Path $k -Force | Out-Null; New-ItemProperty -Path $k -Name '(Default)' -Value 'URL:MIMI Baby Studio Launcher' -Force | Out-Null; New-ItemProperty -Path $k -Name 'URL Protocol' -Value '' -Force | Out-Null; New-Item -Path ($k+'\shell\open\command') -Force | Out-Null; New-ItemProperty -Path ($k+'\shell\open\command') -Name '(Default)' -Value ('wscript.exe ' + [char]34 + $v + [char]34) -Force | Out-Null" >nul 2>&1
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$startup=[Environment]::GetFolderPath('Startup'); $w=New-Object -ComObject WScript.Shell; $s=$w.CreateShortcut((Join-Path $startup 'MIMI Baby Studio.lnk')); $s.TargetPath='wscript.exe'; $s.Arguments=([char]34)+'%VBS%'+[char]34; $s.WorkingDirectory='%INSTALL_DIR%'; $s.IconLocation='%SystemRoot%\System32\SHELL32.dll,70'; $s.Save()" >nul 2>&1
+
+:: Create a hidden Windows logon task. The task runs wscript.exe directly
+:: as the current user; start.bat is NEVER part of the startup path.
+set "MIMI_VBS=%VBS%"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$vbs=$env:MIMI_VBS; $uid=[System.Security.Principal.WindowsIdentity]::GetCurrent().Name; Unregister-ScheduledTask -TaskName 'MIMI Baby Studio' -Confirm:$false -ErrorAction SilentlyContinue; $a=New-ScheduledTaskAction -Execute 'wscript.exe' -Argument ('"'+$vbs+'"'); $t=New-ScheduledTaskTrigger -AtLogOn; $s=New-ScheduledTaskSettingsSet -Hidden -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -StartWhenAvailable; $p=New-ScheduledTaskPrincipal -UserId $uid -LogonType Interactive -RunLevel Limited; Register-ScheduledTask -TaskName 'MIMI Baby Studio' -Action $a -Trigger $t -Settings $s -Principal $p -Description 'Starts MIMI Baby Studio silently in the background at Windows logon.' -Force | Out-Null" >nul 2>&1
 
 :: 6. Start + wait + browser
  echo [6/6] Starting MIMI Baby Studio silently...

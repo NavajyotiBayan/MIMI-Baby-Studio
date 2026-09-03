@@ -28,6 +28,7 @@ where winget.exe >nul 2>&1 && winget uninstall --id Gyan.FFmpeg -e --silent --ac
 where winget.exe >nul 2>&1 && winget uninstall --id Python.Python.3.13 -e --silent --accept-source-agreements >nul 2>&1
 
 echo [4/5] Removing startup and launcher registration...
+schtasks /delete /tn "MIMI Baby Studio" /f >nul 2>&1
 if exist "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\MIMI Baby Studio.lnk" del /q "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\MIMI Baby Studio.lnk" >nul 2>&1
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Remove-Item -Path 'HKCU:\Software\Classes\mimibaby' -Recurse -Force -ErrorAction SilentlyContinue" >nul 2>&1
 
