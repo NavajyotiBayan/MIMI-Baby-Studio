@@ -1,216 +1,233 @@
 @echo off
-setlocal EnableExtensions EnableDelayedExpansion
+setlocal EnableExtensions
+
 set "INSTALL_DIR=C:\MIMI Baby Studio"
-set "CURRENT_DIR=%~dp0"
+set "SOURCE_DIR=%~dp0"
+set "SOURCE_DIR=%SOURCE_DIR:~0,-1%"
+set "MIMI_START_BAT=%~f0"
 
-:: ------------------------------------------------------------
-:: MIMI Baby Studio v2 - automatic first-run installer
-:: Source = the folder containing this BAT file.
-:: Destination = C:\MIMI Baby Studio.
-:: The installer self-elevates through the normal Windows UAC
-:: prompt; no administrator password is stored or required.
-:: ------------------------------------------------------------
-
-:: If already running from the fixed install directory, skip copying.
-if /I "%CURRENT_DIR:~0,-1%"=="%INSTALL_DIR%" goto SETUP
-
-:: Always elevate before touching C:\MIMI Baby Studio.
-:: This avoids a non-admin Robocopy attempt and prevents broken
-:: quote handling when the source path contains spaces.
-if /I not "%~1"=="--elevated" goto ELEVATE
-
-goto INSTALL_TO_ROOT
-
-:ELEVATE
-echo.
 echo ============================================================
 echo                 MIMI BABY STUDIO v2
 echo ============================================================
 echo.
-echo Installing the studio to:
+echo Source:
+echo   %SOURCE_DIR%
+echo.
+echo Destination:
 echo   %INSTALL_DIR%
 echo.
-echo Requesting Windows Administrator permission...
-echo.
 
-:: Launch a new elevated copy of this exact BAT file.
-:: The elevated process performs the copy and setup; this original
-:: non-elevated process exits immediately.  This avoids fragile nested
-:: quote/argument handling and never attempts to write to C: itself.
-set "MIMI_BAT=%~f0"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$bat=$env:MIMI_BAT; Start-Process -FilePath 'cmd.exe' -Verb RunAs -ArgumentList @('/d','/c','call "' + $bat + '" --elevated')" 
-if errorlevel 1 (
-  echo [ERROR] Could not start the Administrator installer.
-  echo Please approve the Windows UAC prompt and try again.
-  echo.
-  pause
-  exit /b 1
+REM If this is the installed copy, do not copy again.
+if /I "%SOURCE_DIR%"=="%INSTALL_DIR%" goto SETUP
+
+REM Self-elevate this exact BAT directly. This avoids cmd.exe
+REM argument/quote parsing problems with paths containing spaces.
+if /I not "%~1"=="--elevated" (
+    echo Requesting Windows Administrator permission...
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
+      "$bat=$env:MIMI_START_BAT; Start-Process -FilePath $bat -Verb RunAs -ArgumentList '--elevated'"
+    if errorlevel 1 (
+        echo.
+        echo [ERROR] Windows could not start the Administrator installer.
+        echo Right-click start.bat and choose ^"Run as administrator^".
+        echo.
+        pause
+        exit /b 1
+    )
+    exit /b 0
 )
-endlocal
-exit /b 0
 
-:INSTALL_TO_ROOT
-:: At this point this BAT is running elevated.
-set "SOURCE_DIR=%~dp0"
-set "SOURCE_DIR=%SOURCE_DIR:~0,-1%"
-
+REM Export the BAT path for the PowerShell elevation command.
+REM (The parent process supplies this variable before reaching here.)
 if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%" >nul 2>&1
 if not exist "%INSTALL_DIR%" (
-  echo [ERROR] Could not create "%INSTALL_DIR%" even with Administrator access.
-  pause
-  exit /b 1
+    echo [ERROR] Cannot create:
+    echo   %INSTALL_DIR%
+    echo.
+    pause
+    exit /b 1
 )
 
-:: Stop an existing MIMI server before updating the installed files.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$p=Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue; if($p){$p.OwningProcess | Sort-Object -Unique | ForEach-Object {Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue}}" >nul 2>&1
-timeout /t 1 /nobreak >nul
+echo Copying MIMI Baby Studio...
+robocopy "%SOURCE_DIR%" "%INSTALL_DIR%" /E /COPY:DAT /DCOPY:DAT /XJ /R:2 /W:1 /XD temp __pycache__ .git /XF *.log setup.log server.log
+set "RC=%ERRORLEVEL%"
 
-:: Robocopy uses the exact BAT-derived source and fixed C: destination.
-:: Do not use a PowerShell-expanded path here; that was the source of the
-:: previous malformed Source/Destination error.
-robocopy "%SOURCE_DIR%" "%INSTALL_DIR%" /E /COPY:DAT /DCOPY:DAT /XJ /R:2 /W:1 /XD "temp" "__pycache__" ".git" /XF "*.log" "setup.log" "server.log" >nul
-set "COPY_RC=%ERRORLEVEL%"
-
-:: Robocopy codes 0-7 are successful/non-fatal. 8+ means failure.
-if %COPY_RC% GEQ 8 (
-  echo.
-  echo [ERROR] Studio copy failed. Robocopy returned %COPY_RC%.
-  echo.
-  echo Source:
-  echo   "%SOURCE_DIR%"
-  echo Destination:
-  echo   "%INSTALL_DIR%"
-  echo.
-  echo Detailed Robocopy output:
-  echo ------------------------------------------------------------------------
-  robocopy "%SOURCE_DIR%" "%INSTALL_DIR%" /E /COPY:DAT /DCOPY:DAT /XJ /R:1 /W:1 /XD "temp" "__pycache__" ".git" /XF "*.log" "setup.log" "server.log"
-  echo ------------------------------------------------------------------------
-  echo.
-  pause
-  exit /b 1
+if %RC% GEQ 8 (
+    echo.
+    echo [ERROR] Copy failed. Robocopy returned %RC%.
+    echo.
+    echo Source:
+    echo   "%SOURCE_DIR%"
+    echo Destination:
+    echo   "%INSTALL_DIR%"
+    echo.
+    pause
+    exit /b 1
 )
 
-echo [OK] MIMI Baby Studio copied to:
-echo   %INSTALL_DIR%
 echo.
-echo Starting the installed copy...
+echo [OK] MIMI Baby Studio copied successfully.
+echo.
+echo Starting the installed setup...
 timeout /t 1 /nobreak >nul
 start "" "%INSTALL_DIR%\start.bat"
-endlocal
 exit /b 0
 
 :SETUP
 cd /d "%INSTALL_DIR%"
 title MIMI Baby Studio - Setup
-set "LOG=%INSTALL_DIR%\setup.log"
-echo [INFO] MIMI Baby Studio v2 setup started. > "%LOG%"
 
-echo.
 echo ============================================================
 echo                 MIMI BABY STUDIO v2
 echo              Automatic Dependency Setup
 echo ============================================================
 echo.
-echo Install location: %INSTALL_DIR%
+echo Install location:
+echo   %INSTALL_DIR%
 echo.
 
-:: 1. Python
- echo [1/6] Checking Python...
+REM Python
+echo [1/6] Checking Python...
 set "PYEXE="
-for /f "delims=" %%P in ('where.exe python.exe 2^>nul') do if not defined PYEXE if /I not "%%~fP"=="%LOCALAPPDATA%\Microsoft\WindowsApps\python.exe" set "PYEXE=%%~fP"
-if not defined PYEXE (
-  echo [!] Python not found. Installing Python 3.13...
-  where winget.exe >nul 2>&1 || (echo [ERROR] WinGet is unavailable.& pause& exit /b 1)
-  winget install --id Python.Python.3.13 -e --accept-source-agreements --accept-package-agreements
-  if errorlevel 1 (echo [ERROR] Python installation failed.& pause& exit /b 1)
-  timeout /t 2 /nobreak >nul
-  for /f "delims=" %%P in ('where.exe python.exe 2^>nul') do if not defined PYEXE if /I not "%%~fP"=="%LOCALAPPDATA%\Microsoft\WindowsApps\python.exe" set "PYEXE=%%~fP"
+for /f "delims=" %%P in ('where.exe python.exe 2^>nul') do (
+    if not defined PYEXE if /I not "%%~fP"=="%LOCALAPPDATA%\Microsoft\WindowsApps\python.exe" set "PYEXE=%%~fP"
 )
+if not defined PYEXE if exist "%LOCALAPPDATA%\Programs\Python\Python313\python.exe" set "PYEXE=%LOCALAPPDATA%\Programs\Python\Python313\python.exe"
+if not defined PYEXE if exist "C:\Program Files\Python313\python.exe" set "PYEXE=C:\Program Files\Python313\python.exe"
+
 if not defined PYEXE (
-  if exist "%LOCALAPPDATA%\Programs\Python\Python313\python.exe" set "PYEXE=%LOCALAPPDATA%\Programs\Python\Python313\python.exe"
+    echo [!] Python not found. Installing Python 3.13...
+    where winget.exe >nul 2>&1 || (
+        echo [ERROR] WinGet is unavailable.
+        pause
+        exit /b 1
+    )
+    winget install --id Python.Python.3.13 -e --accept-source-agreements --accept-package-agreements
+    if errorlevel 1 (
+        echo [ERROR] Python installation failed.
+        pause
+        exit /b 1
+    )
+    timeout /t 3 /nobreak >nul
+    if exist "%LOCALAPPDATA%\Programs\Python\Python313\python.exe" set "PYEXE=%LOCALAPPDATA%\Programs\Python\Python313\python.exe"
+    if not defined PYEXE if exist "C:\Program Files\Python313\python.exe" set "PYEXE=C:\Program Files\Python313\python.exe"
 )
+
 if not defined PYEXE (
-  if exist "C:\Program Files\Python313\python.exe" set "PYEXE=C:\Program Files\Python313\python.exe"
+    echo [ERROR] Could not locate python.exe.
+    pause
+    exit /b 1
 )
-if not defined PYEXE (echo [ERROR] Could not locate a usable python.exe.& echo See setup.log.& pause& exit /b 1)
 echo [OK] Python: %PYEXE%
 
-:: 2. pip
- echo.
-echo [2/6] Checking pip and Python packages...
-"%PYEXE%" -m pip --version >nul 2>&1 || "%PYEXE%" -m ensurepip --upgrade
+REM Python dependencies
+echo.
+echo [2/6] Installing Python dependencies...
+"%PYEXE%" -m pip --version >nul 2>&1
+if errorlevel 1 "%PYEXE%" -m ensurepip --upgrade
 "%PYEXE%" -m pip install --disable-pip-version-check --user -r requirements.txt
-if errorlevel 1 (echo [ERROR] Python dependencies failed.& pause& exit /b 1)
-"%PYEXE%" -c "import flask, PIL; print('[OK] Flask and Pillow are available.')"
-if errorlevel 1 (echo [ERROR] Dependency verification failed.& pause& exit /b 1)
+if errorlevel 1 (
+    echo [ERROR] Python dependencies failed.
+    pause
+    exit /b 1
+)
+"%PYEXE%" -c "import flask, PIL" >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] Flask/Pillow verification failed.
+    pause
+    exit /b 1
+)
+echo [OK] Python dependencies ready.
 
-:: 3. FFmpeg locate/install
- echo.
+REM FFmpeg
+echo.
 echo [3/6] Checking FFmpeg...
 set "FFMPEG_EXE="
 for /f "delims=" %%F in ('where.exe ffmpeg.exe 2^>nul') do if not defined FFMPEG_EXE set "FFMPEG_EXE=%%~fF"
 if not defined FFMPEG_EXE if exist "%LOCALAPPDATA%\Microsoft\WinGet\Links\ffmpeg.exe" set "FFMPEG_EXE=%LOCALAPPDATA%\Microsoft\WinGet\Links\ffmpeg.exe"
-if not defined FFMPEG_EXE if exist "%LOCALAPPDATA%\Microsoft\WinGet\Packages" for /f "delims=" %%F in ('where.exe /r "%LOCALAPPDATA%\Microsoft\WinGet\Packages" ffmpeg.exe 2^>nul') do if not defined FFMPEG_EXE set "FFMPEG_EXE=%%~fF"
-if not defined FFMPEG_EXE if exist "C:\ffmpeg\bin\ffmpeg.exe" set "FFMPEG_EXE=C:\ffmpeg\bin\ffmpeg.exe"
-if not defined FFMPEG_EXE (
-  echo [!] FFmpeg not found. Installing Gyan.FFmpeg...
-  where winget.exe >nul 2>&1 || (echo [ERROR] WinGet is unavailable.& pause& exit /b 1)
-  winget install --id Gyan.FFmpeg -e --accept-source-agreements --accept-package-agreements
-  if errorlevel 1 (echo [ERROR] FFmpeg installation failed.& pause& exit /b 1)
-  timeout /t 2 /nobreak >nul
-  for /f "delims=" %%F in ('where.exe ffmpeg.exe 2^>nul') do if not defined FFMPEG_EXE set "FFMPEG_EXE=%%~fF"
-  if not defined FFMPEG_EXE if exist "%LOCALAPPDATA%\Microsoft\WinGet\Links\ffmpeg.exe" set "FFMPEG_EXE=%LOCALAPPDATA%\Microsoft\WinGet\Links\ffmpeg.exe"
-  if not defined FFMPEG_EXE if exist "%LOCALAPPDATA%\Microsoft\WinGet\Packages" for /f "delims=" %%F in ('where.exe /r "%LOCALAPPDATA%\Microsoft\WinGet\Packages" ffmpeg.exe 2^>nul') do if not defined FFMPEG_EXE set "FFMPEG_EXE=%%~fF"
+if not defined FFMPEG_EXE if exist "%LOCALAPPDATA%\Microsoft\WinGet\Packages" (
+    for /f "delims=" %%F in ('where.exe /r "%LOCALAPPDATA%\Microsoft\WinGet\Packages" ffmpeg.exe 2^>nul') do if not defined FFMPEG_EXE set "FFMPEG_EXE=%%~fF"
 )
-if not defined FFMPEG_EXE (echo [ERROR] FFmpeg executable could not be located.& pause& exit /b 1)
-for %%F in ("%FFMPEG_EXE%") do set "FFMPEG_DIR=%%~dpF"
-set "PATH=%FFMPEG_DIR%;%PATH%"
+if not defined FFMPEG_EXE if exist "C:\ffmpeg\bin\ffmpeg.exe" set "FFMPEG_EXE=C:\ffmpeg\bin\ffmpeg.exe"
+
+if not defined FFMPEG_EXE (
+    echo [!] FFmpeg not found. Installing...
+    where winget.exe >nul 2>&1 || (
+        echo [ERROR] WinGet is unavailable.
+        pause
+        exit /b 1
+    )
+    winget install --id Gyan.FFmpeg -e --accept-source-agreements --accept-package-agreements
+    if errorlevel 1 (
+        echo [ERROR] FFmpeg installation failed.
+        pause
+        exit /b 1
+    )
+    timeout /t 3 /nobreak >nul
+    for /f "delims=" %%F in ('where.exe /r "%LOCALAPPDATA%\Microsoft\WinGet\Packages" ffmpeg.exe 2^>nul') do if not defined FFMPEG_EXE set "FFMPEG_EXE=%%~fF"
+    if not defined FFMPEG_EXE if exist "%LOCALAPPDATA%\Microsoft\WinGet\Links\ffmpeg.exe" set "FFMPEG_EXE=%LOCALAPPDATA%\Microsoft\WinGet\Links\ffmpeg.exe"
+)
+
+if not defined FFMPEG_EXE (
+    echo [ERROR] FFmpeg executable could not be located.
+    pause
+    exit /b 1
+)
 "%FFMPEG_EXE%" -version >nul 2>&1
-if errorlevel 1 (echo [ERROR] FFmpeg was found but could not be executed.& echo %FFMPEG_EXE%& pause& exit /b 1)
+if errorlevel 1 (
+    echo [ERROR] FFmpeg was found but could not be executed.
+    echo %FFMPEG_EXE%
+    pause
+    exit /b 1
+)
 echo [OK] FFmpeg: %FFMPEG_EXE%
 
-:: 4. Folders
- echo.
+REM App folders
+echo.
 echo [4/6] Preparing application folders...
 if not exist "%INSTALL_DIR%\temp" mkdir "%INSTALL_DIR%\temp"
 
-:: 5. Launcher protocol + Windows startup
- echo [5/6] Registering background launcher...
-set "VBS=%INSTALL_DIR%\launch_silent.vbs"
-set "MIMI_VBS=%VBS%"
+REM Background startup
+echo.
+echo [5/6] Configuring background startup...
+set "MIMI_VBS=%INSTALL_DIR%\launch_silent.vbs"
 set "MIMI_INSTALL=%INSTALL_DIR%"
 
-:: Remove old/broken startup entries and old scheduled task.
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$startup=[Environment]::GetFolderPath('Startup'); $ws=New-Object -ComObject WScript.Shell; if(Test-Path -LiteralPath $startup){Get-ChildItem -LiteralPath $startup -File -ErrorAction SilentlyContinue | ForEach-Object { try { if($_.Name -match '(?i)MIMI|Video-to-PDF'){Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue; return}; if($_.Extension -eq '.lnk'){ $sc=$ws.CreateShortcut($_.FullName); $t=[string]$sc.TargetPath; $a=[string]$sc.Arguments; if((($t -match '(?i)wscript|cscript|cmd|powershell') -and ($a -match '(?i)launch_silent\.vbs|start\.bat')) -or $t -match '(?i)Video-to-PDF|MIMI'){Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue} } } catch {} }}" >nul 2>&1
-schtasks /delete /tn "MIMI Baby Studio" /f >nul 2>&1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$startup=[Environment]::GetFolderPath('Startup'); $ws=New-Object -ComObject WScript.Shell; $lnk=$ws.CreateShortcut((Join-Path $startup 'MIMI Baby Studio.lnk')); $lnk.TargetPath=Join-Path $env:SystemRoot 'System32\wscript.exe'; $lnk.Arguments='//B //NoLogo ""'+$env:MIMI_VBS+'""'; $lnk.WorkingDirectory=$env:MIMI_INSTALL; $lnk.WindowStyle=7; $lnk.Description='MIMI Baby Studio background server'; $lnk.Save()" >nul 2>&1
 
-:: Register mimibaby://start using the exact installed VBS path.
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$k='HKCU:\Software\Classes\mimibaby'; $v=$env:MIMI_VBS; New-Item -Path ($k+'\shell\open\command') -Force | Out-Null; New-ItemProperty -Path $k -Name '(Default)' -Value 'URL:MIMI Baby Studio Launcher' -Force | Out-Null; New-ItemProperty -Path $k -Name 'URL Protocol' -Value '' -Force | Out-Null; New-ItemProperty -Path ($k+'\shell\open\command') -Name '(Default)' -Value ('wscript.exe //B //NoLogo ' + [char]34 + $v + [char]34) -Force | Out-Null" >nul 2>&1
-
-:: Create a normal per-user Startup shortcut.  The shortcut target is
-:: wscript.exe and the VBS path is stored in the Arguments field, so
-:: spaces in C:\MIMI Baby Studio are handled by Windows itself.
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$startup=[Environment]::GetFolderPath('Startup'); $ws=New-Object -ComObject WScript.Shell; $lnk=$ws.CreateShortcut((Join-Path $startup 'MIMI Baby Studio.lnk')); $lnk.TargetPath=Join-Path $env:SystemRoot 'System32\wscript.exe'; $lnk.Arguments='//B //NoLogo ' + [char]34 + $env:MIMI_VBS + [char]34; $lnk.WorkingDirectory=$env:MIMI_INSTALL; $lnk.WindowStyle=7; $lnk.Description='MIMI Baby Studio background server'; $lnk.Save()" >nul 2>&1
-
-:: 6. Start + wait + browser
- echo [6/6] Starting MIMI Baby Studio silently...
-if exist "%INSTALL_DIR%\server.log" del /q "%INSTALL_DIR%\server.log" >nul 2>&1
-start "" /b wscript.exe //B //NoLogo "%VBS%"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ok=$false; 1..40 | %% { try { $c=New-Object Net.Sockets.TcpClient; $c.Connect('127.0.0.1',5000); $c.Close(); $ok=$true; break } catch {}; Start-Sleep -Milliseconds 500 }; if(-not $ok){ exit 1 }"
-if errorlevel 1 (
-  echo [!] Silent launcher did not respond. Trying direct hidden Python...
-  set "MIMI_PY=%PYEXE%"
-  powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command "$p=$env:MIMI_PY; $w=$env:MIMI_INSTALL; Start-Process -FilePath $p -ArgumentList 'app.py' -WorkingDirectory $w -WindowStyle Hidden"
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "$ok=$false; 1..30 | %% { try { $c=New-Object Net.Sockets.TcpClient; $c.Connect('127.0.0.1',5000); $c.Close(); $ok=$true; break } catch {}; Start-Sleep -Milliseconds 500 }; if(-not $ok){ exit 1 }"
-  if errorlevel 1 (echo [ERROR] MIMI Baby Studio server did not start. Run debug_server.bat.& pause& exit /b 1)
+if exist "%STARTUP%\MIMI Baby Studio.lnk" (
+    echo [OK] Background startup configured.
+) else (
+    echo [WARNING] Could not create the startup shortcut.
 )
+
+REM Start server
+echo.
+echo [6/6] Starting MIMI Baby Studio...
+if exist "%INSTALL_DIR%\server.log" del /q "%INSTALL_DIR%\server.log" >nul 2>&1
+"%WINDIR%\System32\wscript.exe" //B //NoLogo "%MIMI_VBS%"
+
+for /l %%N in (1,1,40) do (
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
+      "try{$c=New-Object Net.Sockets.TcpClient;$c.Connect('127.0.0.1',5000);$c.Close();exit 0}catch{exit 1}"
+    if not errorlevel 1 goto READY
+    timeout /t 1 /nobreak >nul
+)
+
+echo.
+echo [ERROR] MIMI Baby Studio server did not start.
+echo Check:
+echo   %INSTALL_DIR%\server.log
+echo.
+pause
+exit /b 1
+
+:READY
+echo.
+echo [OK] Server is running.
 start "" "http://127.0.0.1:5000"
 echo.
-echo ============================================================
-echo  MIMI Baby Studio v2 is ready.
-echo  Installed at: %INSTALL_DIR%
-echo ============================================================
-echo.
+echo MIMI Baby Studio is ready.
 timeout /t 2 /nobreak >nul
-endlocal
 exit /b 0
