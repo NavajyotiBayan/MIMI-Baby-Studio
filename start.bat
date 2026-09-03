@@ -33,12 +33,15 @@ echo.
 echo Requesting Windows Administrator permission...
 echo.
 
+:: Launch a new elevated copy of this exact BAT file.
+:: The elevated process performs the copy and setup; this original
+:: non-elevated process exits immediately.  This avoids fragile nested
+:: quote/argument handling and never attempts to write to C: itself.
 set "MIMI_BAT=%~f0"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$bat=$env:MIMI_BAT; $arg='/d /c ""' + $bat + '" --elevated"'; $p=Start-Process -FilePath $env:ComSpec -ArgumentList $arg -Verb RunAs -Wait -PassThru; exit $p.ExitCode"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$bat=$env:MIMI_BAT; Start-Process -FilePath 'cmd.exe' -Verb RunAs -ArgumentList @('/d','/c','call "' + $bat + '" --elevated')" 
 if errorlevel 1 (
-  echo [ERROR] Administrator permission was cancelled or failed.
-  echo Please click Yes on the Windows UAC prompt and try again.
+  echo [ERROR] Could not start the Administrator installer.
+  echo Please approve the Windows UAC prompt and try again.
   echo.
   pause
   exit /b 1
@@ -174,28 +177,30 @@ if not exist "%INSTALL_DIR%\temp" mkdir "%INSTALL_DIR%\temp"
 :: 5. Launcher protocol + Windows startup
  echo [5/6] Registering background launcher...
 set "VBS=%INSTALL_DIR%\launch_silent.vbs"
-
-:: Remove legacy Startup-folder entries created by older releases.
-:: New releases use Task Scheduler instead, so Windows never launches
-:: start.bat/cmd.exe during logon and no terminal window can flash.
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$startup=[Environment]::GetFolderPath('Startup'); $ws=New-Object -ComObject WScript.Shell; Get-ChildItem -LiteralPath $startup -File -ErrorAction SilentlyContinue | ForEach-Object { try { if($_.Name -match '(?i)MIMI|Video-to-PDF') { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue; return }; if($_.Extension -eq '.lnk') { $s=$ws.CreateShortcut($_.FullName); $t=[string]$s.TargetPath; $a=[string]$s.Arguments; if((($t -match '(?i)wscript|cscript|cmd|powershell|start\.bat|launch_silent\.vbs') -and (($a -match '(?i)launch_silent\.vbs') -or ($a -match '(?i)start\.bat'))) -or $t -match '(?i)Video-to-PDF|MIMI') { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue } } } catch {} }" >nul 2>&1
-
-:: Register the mimibaby://start protocol.
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$k='HKCU:\Software\Classes\mimibaby'; $v='%VBS%'; New-Item -Path $k -Force | Out-Null; New-ItemProperty -Path $k -Name '(Default)' -Value 'URL:MIMI Baby Studio Launcher' -Force | Out-Null; New-ItemProperty -Path $k -Name 'URL Protocol' -Value '' -Force | Out-Null; New-Item -Path ($k+'\shell\open\command') -Force | Out-Null; New-ItemProperty -Path ($k+'\shell\open\command') -Name '(Default)' -Value ('wscript.exe ' + [char]34 + $v + [char]34) -Force | Out-Null" >nul 2>&1
-
-:: Create a hidden Windows logon task. The task runs wscript.exe directly
-:: as the current user; start.bat is NEVER part of the startup path.
 set "MIMI_VBS=%VBS%"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$vbs=$env:MIMI_VBS; $uid=[System.Security.Principal.WindowsIdentity]::GetCurrent().Name; Unregister-ScheduledTask -TaskName 'MIMI Baby Studio' -Confirm:$false -ErrorAction SilentlyContinue; $a=New-ScheduledTaskAction -Execute 'wscript.exe' -Argument ('"'+$vbs+'"'); $t=New-ScheduledTaskTrigger -AtLogOn; $s=New-ScheduledTaskSettingsSet -Hidden -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -StartWhenAvailable; $p=New-ScheduledTaskPrincipal -UserId $uid -LogonType Interactive -RunLevel Limited; Register-ScheduledTask -TaskName 'MIMI Baby Studio' -Action $a -Trigger $t -Settings $s -Principal $p -Description 'Starts MIMI Baby Studio silently in the background at Windows logon.' -Force | Out-Null" >nul 2>&1
+set "MIMI_INSTALL=%INSTALL_DIR%"
+
+:: Remove old/broken startup entries and old scheduled task.
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$startup=[Environment]::GetFolderPath('Startup'); $ws=New-Object -ComObject WScript.Shell; if(Test-Path -LiteralPath $startup){Get-ChildItem -LiteralPath $startup -File -ErrorAction SilentlyContinue | ForEach-Object { try { if($_.Name -match '(?i)MIMI|Video-to-PDF'){Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue; return}; if($_.Extension -eq '.lnk'){ $sc=$ws.CreateShortcut($_.FullName); $t=[string]$sc.TargetPath; $a=[string]$sc.Arguments; if((($t -match '(?i)wscript|cscript|cmd|powershell') -and ($a -match '(?i)launch_silent\.vbs|start\.bat')) -or $t -match '(?i)Video-to-PDF|MIMI'){Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue} } } catch {} }}" >nul 2>&1
+schtasks /delete /tn "MIMI Baby Studio" /f >nul 2>&1
+
+:: Register mimibaby://start using the exact installed VBS path.
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$k='HKCU:\Software\Classes\mimibaby'; $v=$env:MIMI_VBS; New-Item -Path ($k+'\shell\open\command') -Force | Out-Null; New-ItemProperty -Path $k -Name '(Default)' -Value 'URL:MIMI Baby Studio Launcher' -Force | Out-Null; New-ItemProperty -Path $k -Name 'URL Protocol' -Value '' -Force | Out-Null; New-ItemProperty -Path ($k+'\shell\open\command') -Name '(Default)' -Value ('wscript.exe //B //NoLogo ' + [char]34 + $v + [char]34) -Force | Out-Null" >nul 2>&1
+
+:: Create a normal per-user Startup shortcut.  The shortcut target is
+:: wscript.exe and the VBS path is stored in the Arguments field, so
+:: spaces in C:\MIMI Baby Studio are handled by Windows itself.
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$startup=[Environment]::GetFolderPath('Startup'); $ws=New-Object -ComObject WScript.Shell; $lnk=$ws.CreateShortcut((Join-Path $startup 'MIMI Baby Studio.lnk')); $lnk.TargetPath=Join-Path $env:SystemRoot 'System32\wscript.exe'; $lnk.Arguments='//B //NoLogo ' + [char]34 + $env:MIMI_VBS + [char]34; $lnk.WorkingDirectory=$env:MIMI_INSTALL; $lnk.WindowStyle=7; $lnk.Description='MIMI Baby Studio background server'; $lnk.Save()" >nul 2>&1
 
 :: 6. Start + wait + browser
  echo [6/6] Starting MIMI Baby Studio silently...
 if exist "%INSTALL_DIR%\server.log" del /q "%INSTALL_DIR%\server.log" >nul 2>&1
-start "" /b wscript.exe "%VBS%"
+start "" /b wscript.exe //B //NoLogo "%VBS%"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$ok=$false; 1..40 | %% { try { $c=New-Object Net.Sockets.TcpClient; $c.Connect('127.0.0.1',5000); $c.Close(); $ok=$true; break } catch {}; Start-Sleep -Milliseconds 500 }; if(-not $ok){ exit 1 }"
 if errorlevel 1 (
   echo [!] Silent launcher did not respond. Trying direct hidden Python...
-  powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command "$p='%PYEXE%'; Start-Process -FilePath $p -ArgumentList 'app.py' -WorkingDirectory '%INSTALL_DIR%' -WindowStyle Hidden"
+  set "MIMI_PY=%PYEXE%"
+  powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command "$p=$env:MIMI_PY; $w=$env:MIMI_INSTALL; Start-Process -FilePath $p -ArgumentList 'app.py' -WorkingDirectory $w -WindowStyle Hidden"
   powershell -NoProfile -ExecutionPolicy Bypass -Command "$ok=$false; 1..30 | %% { try { $c=New-Object Net.Sockets.TcpClient; $c.Connect('127.0.0.1',5000); $c.Close(); $ok=$true; break } catch {}; Start-Sleep -Milliseconds 500 }; if(-not $ok){ exit 1 }"
   if errorlevel 1 (echo [ERROR] MIMI Baby Studio server did not start. Run debug_server.bat.& pause& exit /b 1)
 )

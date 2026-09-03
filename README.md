@@ -118,8 +118,3 @@ This project is released under the MIT License. See [`LICENSE`](LICENSE).
 ## ❤️ MIMI Baby Studio
 
 Made with love for a smoother workday. ♥
-
-## Background startup
-
-MIMI Baby Studio uses a hidden Windows Task Scheduler logon task to start `wscript.exe` directly. `start.bat` is not used during Windows startup, so no command prompt window should flash at login.
-

@@ -29,7 +29,8 @@ where winget.exe >nul 2>&1 && winget uninstall --id Python.Python.3.13 -e --sile
 
 echo [4/5] Removing startup and launcher registration...
 schtasks /delete /tn "MIMI Baby Studio" /f >nul 2>&1
-if exist "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\MIMI Baby Studio.lnk" del /q "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\MIMI Baby Studio.lnk" >nul 2>&1
+for %%S in ("%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\MIMI Baby Studio.lnk" "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\Video-to-PDF.lnk" "%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\launch_silent.lnk") do if exist "%%~S" del /q "%%~S" >nul 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$startup=[Environment]::GetFolderPath('Startup'); Get-ChildItem -LiteralPath $startup -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '(?i)MIMI|Video-to-PDF' } | Remove-Item -Force -ErrorAction SilentlyContinue" >nul 2>&1
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Remove-Item -Path 'HKCU:\Software\Classes\mimibaby' -Recurse -Force -ErrorAction SilentlyContinue" >nul 2>&1
 
 echo [5/5] Clearing temporary files and logs...
