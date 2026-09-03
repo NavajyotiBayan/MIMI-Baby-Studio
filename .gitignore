@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+
+# Runtime files
+temp/
+*.log
+setup.log
+server.log
+
+# Local/editor files
+.vscode/
+.idea/
+*.code-workspace
+.DS_Store
+Thumbs.db
+
+# Build/package output
+build/
+dist/
+*.spec
+*.zip
+
+# OS leftovers
+Desktop.ini
