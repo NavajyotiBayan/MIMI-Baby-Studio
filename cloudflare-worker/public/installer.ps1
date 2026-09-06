@@ -6,7 +6,7 @@ $ErrorActionPreference = 'Stop'
 
 # CHANGE THIS ONE VALUE after you create/push the GitHub repository.
 # Example: https://github.com/YourUser/MIMI-Baby-Studio/archive/refs/heads/main.zip
-$MimiDownloadUrl = 'https://github.com/CHANGE-ME/MIMI-Baby-Studio/archive/refs/heads/main.zip'
+$MimiDownloadUrl = 'https://github.com/NavajyotiBayan/MIMI-Baby-Studio/archive/refs/heads/main.zip'
 
 $InstallDir = 'C:\MIMI Baby Studio'
 $TempRoot = Join-Path $env:TEMP 'MIMI-Baby-Studio-Installer'

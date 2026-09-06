@@ -1,34 +1,38 @@
 # MIMI Baby Studio — Cloudflare one-command installer
 
-This Worker serves a PowerShell installer at:
+This Worker serves the PowerShell installer at:
 
 ```powershell
 irm navajyoti.online/mimibaby | iex
 ```
 
-## Before deployment
+## GitHub source
 
-1. Create/push the `MIMI-Baby-Studio` repository to GitHub.
-2. Open `public/installer.ps1`.
-3. Change:
+The installer downloads the public GitHub repository:
 
-```powershell
-$MimiDownloadUrl = 'https://github.com/CHANGE-ME/MIMI-Baby-Studio/archive/refs/heads/main.zip'
+```text
+https://github.com/NavajyotiBayan/MIMI-Baby-Studio
 ```
 
-to your real GitHub repository archive URL.
+The configured archive URL is:
 
-## Cloudflare
+```text
+https://github.com/NavajyotiBayan/MIMI-Baby-Studio/archive/refs/heads/main.zip
+```
 
-The Worker project is configured for Workers Static Assets and a dashboard-managed route. The route should be:
+## Cloudflare route
+
+Configure this Worker route in the Cloudflare dashboard:
 
 ```text
 navajyoti.online/mimibaby
 ```
 
-If the route is already configured in the Cloudflare dashboard, leave `routes` out of `wrangler.jsonc`; this prevents a later deploy from overwriting your dashboard route.
+The route is intentionally not declared in `wrangler.jsonc`, so your existing dashboard-managed route is not replaced by deployment.
 
-Deploy with current Wrangler:
+## Deploy
+
+From this directory:
 
 ```powershell
 npm install
@@ -36,4 +40,16 @@ npx wrangler login
 npx wrangler deploy
 ```
 
-Cloudflare currently recommends `wrangler.jsonc` for new Worker projects. Routes can be managed in the dashboard under Worker → Settings → Domains & Routes → Add → Route. See the official Cloudflare documentation for current routing and deployment details.
+After deployment, verify the endpoint:
+
+```powershell
+irm navajyoti.online/mimibaby
+```
+
+It should return the PowerShell installer source as plain text.
+
+Then the user can install MIMI with:
+
+```powershell
+irm navajyoti.online/mimibaby | iex
+```
