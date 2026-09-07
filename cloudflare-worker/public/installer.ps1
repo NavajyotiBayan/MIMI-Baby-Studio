@@ -49,9 +49,9 @@ try {
     Expand-Archive -Path $ZipPath -DestinationPath $ExtractDir -Force
 
     $TopLevel = Get-ChildItem -Path $ExtractDir -Directory | Where-Object {
-        Test-Path (Join-Path $_.FullName 'app.py') -and
-        Test-Path (Join-Path $_.FullName 'start.bat') -and
-        Test-Path (Join-Path $_.FullName 'requirements.txt')
+        (Test-Path (Join-Path $_.FullName 'app.py')) -and
+        (Test-Path (Join-Path $_.FullName 'start.bat')) -and
+        (Test-Path (Join-Path $_.FullName 'requirements.txt'))
     } | Select-Object -First 1
 
     if (-not $TopLevel) {
@@ -69,7 +69,8 @@ try {
     Write-Step 'Starting the MIMI Baby Studio setup...'
     Write-Host '[MIMI] Windows may ask for Administrator permission.' -ForegroundColor Yellow
 
-    $process = Start-Process -FilePath $StartBat `
+    $process = Start-Process -FilePath $env:ComSpec `
+        -ArgumentList @('/c', '"' + $StartBat + '"') `
         -WorkingDirectory $TopLevel.FullName `
         -PassThru
 
