@@ -6,11 +6,20 @@ const views={home:$('#homeView'),tool:$('#toolView'),history:$('#historyView'),s
 function motionTick(el, cls='motion-pop'){if(!el)return;el.classList.remove(cls);void el.offsetWidth;el.classList.add(cls);setTimeout(()=>el.classList.remove(cls),520)}
 
 function setView(view){
- activeView=view; document.body.classList.add('theme-transition'); setTimeout(()=>document.body.classList.remove('theme-transition'),450); Object.entries(views).forEach(([k,v])=>v.classList.toggle('hidden',k!==view));
+ activeView=view;
+ Object.entries(views).forEach(([k,v])=>{
+   if(!v)return;
+   const visible=k===view;
+   v.hidden=!visible;
+   v.classList.toggle('hidden',!visible);
+   v.classList.toggle('active-view',visible);
+   v.setAttribute('aria-hidden',visible?'false':'true');
+ });
  $$('.nav').forEach(b=>b.classList.toggle('active',b.dataset.view===view || (view==='tool'&&b.dataset.tool===tool)));
  const labels={home:['HOME','Your workspace'],tool:[tool==='video'?'VIDEO → PDF':'IMAGES → PDF',tool==='video'?'Video → PDF':'Images → PDF'],history:['HISTORY','Conversion history'],settings:['SETTINGS','Settings']};
  $('#crumbPage').textContent=labels[view][0]; $('#title').textContent=labels[view][1];
- if(view==='home') renderRecent(); if(view==='history') renderHistory();
+ if(view==='home') renderRecent();
+ if(view==='history') renderHistory();
 }
 function setTool(next){
  tool=next; setView('tool');
@@ -22,12 +31,19 @@ function setTool(next){
  $('#dropSub').textContent='or click anywhere to browse files';
  $('#formats').textContent=tool==='video'?'MP4 · MOV · MKV · AVI · WEBM · M4V':'JPG · JPEG · PNG · WEBP · BMP · TIFF';
  $('#videoSettings').classList.toggle('hidden',tool!=='video'); $('#imageSettings').classList.toggle('hidden',tool!=='images');
- drop.classList.remove('has-file'); $('#fileInfo').textContent=''; $('#preview').innerHTML='<span class="preview-icon">✦</span><span><b>Preview</b><small>Your selected file will appear here</small></span>';
+ drop.classList.remove('has-file');
+ video.value=''; images.value='';
+ $('#fileInfo').textContent=''; $('#preview').innerHTML='<span class="preview-icon">✦</span><span><b>Preview</b><small>Your selected file will appear here</small></span>';
 }
 $$('[data-view]').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
 $$('[data-tool]').forEach(b=>b.addEventListener('click',()=>setTool(b.dataset.tool)));
 
-drop.addEventListener('click',()=> (tool==='video'?video:images).click());
+drop.addEventListener('click',()=>{
+ const input=tool==='video'?video:images;
+ // Reset before opening the picker so selecting the same file again fires `change`.
+ input.value='';
+ input.click();
+});
 ['dragenter','dragover'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.add('over')}));
 ['dragleave','drop'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.remove('over')}));
 drop.addEventListener('drop',ev=>{const input=tool==='video'?video:images;if(ev.dataTransfer.files.length){try{input.files=ev.dataTransfer.files}catch(_){return}showFiles()}});
@@ -43,9 +59,9 @@ function historyKey(){return 'mimi_baby_history_v10'}
 function getHistory(){try{return JSON.parse(localStorage.getItem(historyKey())||'[]')}catch(_){return []}}
 function saveHistory(item){const h=getHistory();h.unshift(item);localStorage.setItem(historyKey(),JSON.stringify(h.slice(0,20)))}
 function escapeHtml(s){return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
-function historyMarkup(h){if(!h.length)return '<div class="empty-state"><span>♡</span><b>No conversions yet</b><small>Your finished PDFs will appear here.</small><button class="hero-btn primary" data-tool="video">Create your first PDF →</button></div>';return h.map((x,i)=>`<div class="history-item"><div class="file-icon">PDF</div><div class="history-main"><b>${escapeHtml(x.name)}</b><small>${escapeHtml(x.type)} · ${escapeHtml(x.date)}</small></div><a class="open-link" href="${escapeHtml(x.download||'#')}" ${x.download?'target="_blank" rel="noopener"':''}>${x.download?'Open':'Saved locally'} ↗</a><button class="delete-one" data-index="${i}" title="Remove">×</button></div>`).join('')}
+function historyMarkup(h){if(!h.length)return '<div class="empty-state"><span>♡</span><b>No conversions yet</b><small>Your finished PDFs will appear here.</small><button class="hero-btn primary" data-tool="video">Create your first PDF →</button></div>';return h.map((x,i)=>`<div class="history-item"><div class="file-icon">PDF</div><div class="history-main"><b>${escapeHtml(x.name)}</b><small>${escapeHtml(x.type)} · ${escapeHtml(x.date)}</small></div><a class="open-link native-pdf-link" href="${escapeHtml(x.download||'#')}" data-pdf-name="${escapeHtml(x.name)}">${x.download?'Open':'Saved locally'} ↗</a><button class="delete-one" data-index="${i}" title="Remove">×</button></div>`).join('')}
 function renderHistory(){$('#historyList').innerHTML=historyMarkup(getHistory()); $$('#historyList .delete-one').forEach(b=>b.addEventListener('click',()=>{const h=getHistory();h.splice(+b.dataset.index,1);localStorage.setItem(historyKey(),JSON.stringify(h));renderHistory()})); $$('#historyList [data-tool]').forEach(b=>b.addEventListener('click',()=>setTool(b.dataset.tool)))}
-function renderRecent(){updateTodayStats();const h=getHistory().slice(0,4);$('#homeRecent').innerHTML=h.length?h.map(x=>`<div class="recent-item"><div class="file-icon">PDF</div><div><b>${escapeHtml(x.name)}</b><small>${escapeHtml(x.type)} · ${escapeHtml(x.date)}</small></div><a href="${escapeHtml(x.download||'#')}" ${x.download?'target="_blank" rel="noopener"':''}>Open ↗</a></div>`).join(''):'<div class="mini-empty">No recent conversions yet. Start by choosing a tool above.</div>'}
+function renderRecent(){updateTodayStats();const h=getHistory().slice(0,4);$('#homeRecent').innerHTML=h.length?h.map(x=>`<div class="recent-item"><div class="file-icon">PDF</div><div><b>${escapeHtml(x.name)}</b><small>${escapeHtml(x.type)} · ${escapeHtml(x.date)}</small></div><a class="native-pdf-link" href="${escapeHtml(x.download||'#')}" data-pdf-name="${escapeHtml(x.name)}">Open ↗</a></div>`).join(''):'<div class="mini-empty">No recent conversions yet. Start by choosing a tool above.</div>'}
 
 let pendingConversion=null;
 function formatFileSize(bytes){if(!bytes)return '0 B';const units=['B','KB','MB','GB'];let n=bytes,i=0;while(n>=1024&&i<units.length-1){n/=1024;i++}return `${n>=10||i===0?n.toFixed(0):n.toFixed(1)} ${units[i]}`}
@@ -64,13 +80,13 @@ async function beginConversion(){
  if(!pendingConversion)return;
  const {files,panel,name}=pendingConversion; pendingConversion=null; $('#startModal').classList.add('hidden');
  const fd=new FormData();fd.set('tool',tool);files.forEach(f=>fd.append(tool==='video'?'video':'images',f));panel.querySelectorAll('input[name],select[name]').forEach(el=>{if(el.type==='checkbox'){if(el.checked)fd.set(el.name,'on')}else if(el.name!=='output_name')fd.set(el.name,el.value)});fd.set('output_name',name);if(tool==='video'&&interval.value==='custom')fd.set('interval',$('#customInterval').value);
- $('#errorBox').classList.add('hidden');$('#progressWrap').classList.remove('hidden');$('#consoleWrap').classList.toggle('hidden',tool!=='video');$('#consoleBox').textContent='Waiting for FFmpeg…';$('#progressBar').style.width='4%';$('#progressPercent').textContent='4%';$('#progressText').textContent=tool==='video'?'Preparing video…':'Preparing images…';showConversionProgress(name);setBusy(true);
- try{const r=await fetch('/convert',{method:'POST',body:fd});const data=await r.json();if(!r.ok)throw Error(data.error||'Conversion failed');poll(data.job_id,name)}catch(err){showError(err.message);hideConversionProgress();setBusy(false);$('#progressWrap').classList.add('hidden');$('#consoleWrap').classList.add('hidden')}}
+ $('#errorBox').classList.add('hidden');$('#progressWrap').classList.remove('hidden');$('#progressBar').style.width='4%';$('#progressPercent').textContent='4%';$('#progressText').textContent=tool==='video'?'Preparing video…':'Preparing images…';showConversionProgress(name);setBusy(true);
+ try{const r=await fetch('/convert',{method:'POST',body:fd});const data=await r.json();if(!r.ok)throw Error(data.error||'Conversion failed');poll(data.job_id,name)}catch(err){showError(err.message);hideConversionProgress();setBusy(false);$('#progressWrap').classList.add('hidden')}}
 form.addEventListener('submit',e=>{e.preventDefault();const input=tool==='video'?video:images;if(!input.files.length){showError(tool==='video'?'Please select a video first.':'Please select at least one image.');return}openStartModal()});
 $('#startConversionBtn').addEventListener('click',beginConversion);$('#startCancelBtn').addEventListener('click',closeStartModal);$('#startModalClose').addEventListener('click',closeStartModal);$('#startModal').addEventListener('click',e=>{if(e.target.id==='startModal')closeStartModal()});
 
 function formatBytes(bytes){const n=Number(bytes);if(!Number.isFinite(n)||n<0)return 'Size unavailable';if(n<1024)return `${n} B`;if(n<1024*1024)return `${(n/1024).toFixed(1)} KB`;if(n<1024*1024*1024)return `${(n/1024/1024).toFixed(2)} MB`;return `${(n/1024/1024/1024).toFixed(2)} GB`}
-async function poll(id,outputName){try{const r=await fetch('/status/'+id);const d=await r.json();if(d.status==='error')throw Error(d.message||'Conversion failed');const p=Math.max(0,Math.min(100,d.progress||0));if(tool==='video'&&d.logs){const box=$('#consoleBox');box.textContent=d.logs.join('\n');box.scrollTop=box.scrollHeight}$('#progressBar').style.width=p+'%';$('#progressPercent').textContent=p+'%';$('#progressText').textContent=d.message||'Working…';updateConversionProgress(p,d.message||'Working…');if(d.status==='done'){hideConversionProgress();setBusy(false);const finalName=(outputName||'Mimi_Baby_Document').replace(/\.pdf$/i,'')+'.pdf';$('#openPdfLink').href=d.download;$('#downloadLink').href=d.download;$('#downloadLink').setAttribute('download',finalName);$('#successFileName').textContent=finalName;$('#successFileMeta').textContent=`Ready to view · ${formatBytes(d.filesize)} · Just now`;$('#successModal').classList.remove('hidden');saveHistory({name:finalName,type:tool==='video'?'Video → PDF':'Images → PDF',date:new Date().toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}),download:d.download,size:d.filesize});renderRecent();return}setTimeout(()=>poll(id,outputName),500)}catch(e){hideConversionProgress();showError(e.message);setBusy(false)}}
+async function poll(id,outputName){try{const r=await fetch('/status/'+id);const d=await r.json();if(d.status==='error')throw Error(d.message||'Conversion failed');const p=Math.max(0,Math.min(100,d.progress||0));$('#progressBar').style.width=p+'%';$('#progressPercent').textContent=p+'%';$('#progressText').textContent=d.message||'Working…';updateConversionProgress(p,d.message||'Working…');if(d.status==='done'){hideConversionProgress();setBusy(false);video.value='';images.value='';const finalName=(outputName||'Mimi_Baby_Document').replace(/\.pdf$/i,'')+'.pdf';$('#openPdfLink').dataset.url=d.download;$('#openPdfLink').dataset.fileName=finalName;$('#downloadLink').dataset.url=d.download;$('#downloadLink').dataset.fileName=finalName;$('#successFileName').textContent=finalName;$('#successFileMeta').textContent=`Ready to view · ${formatBytes(d.filesize)} · Just now`;$('#successModal').classList.remove('hidden');saveHistory({name:finalName,type:tool==='video'?'Video → PDF':'Images → PDF',date:new Date().toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}),download:d.download,size:d.filesize});renderRecent();return}setTimeout(()=>poll(id,outputName),500)}catch(e){hideConversionProgress();showError(e.message);setBusy(false);video.value='';images.value='';} }
 
 function showConversionProgress(name){
  const m=$('#conversionModal'); if(!m)return;
@@ -87,7 +103,25 @@ function updateConversionProgress(p,message){
 function hideConversionProgress(){const m=$('#conversionModal');if(m)m.classList.add('hidden')}
 
 function showError(s){$('#errorBox').textContent=s;$('#errorBox').classList.remove('hidden')}
-$('#clearConsole').addEventListener('click',()=>$('#consoleBox').textContent='Console cleared.\n');
+
+async function openNativePdf(url, fileName){
+  if(!window.mimiDesktop?.isElectron){ window.open(url,'_blank','noopener'); return;}
+  try{ await window.mimiDesktop.openPdf(url,fileName);}
+  catch(e){ showError(e?.message||'Could not open the PDF.');}
+}
+async function saveNativePdf(url, fileName){
+  if(!window.mimiDesktop?.isElectron){ const a=document.createElement('a'); a.href=url; a.download=fileName; a.click(); return;}
+  try{ await window.mimiDesktop.savePdf(url,fileName);}
+  catch(e){ showError(e?.message||'Could not save the PDF.');}
+}
+document.addEventListener('click',e=>{
+  const link=e.target?.closest?.('.native-pdf-link');
+  if(!link)return;
+  e.preventDefault(); const url=link.getAttribute('href'); if(url&&url!=='#')openNativePdf(url,link.dataset.pdfName||'MIMI-Baby-Studio.pdf');
+});
+$('#openPdfLink').addEventListener('click',e=>{e.preventDefault();const a=e.currentTarget;if(a.dataset.url)openNativePdf(a.dataset.url,a.dataset.fileName||'MIMI-Baby-Studio.pdf')});
+$('#downloadLink').addEventListener('click',e=>{e.preventDefault();const a=e.currentTarget;if(a.dataset.url)saveNativePdf(a.dataset.url,a.dataset.fileName||'MIMI-Baby-Studio.pdf')});
+$('#openPdfFolder').addEventListener('click',async()=>{try{if(window.mimiDesktop?.openPdfFolder)await window.mimiDesktop.openPdfFolder();}catch(e){showError(e?.message||'Could not open the PDF folder.')}});
 $('#closeModal').addEventListener('click',()=>$('#successModal').classList.add('hidden'));$('#convertAnother').addEventListener('click',()=>{$('#successModal').classList.add('hidden');drop.scrollIntoView({behavior:'smooth',block:'center'});});$('#successModal').addEventListener('click',e=>{if(e.target.id==='successModal')e.currentTarget.classList.add('hidden')});document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!$('#startModal').classList.contains('hidden'))closeStartModal();else $('#successModal').classList.add('hidden')}});
 $('#clearHistory').addEventListener('click',async()=>{
  if(!confirm('Clear all conversion history and temporary files?'))return;
@@ -147,12 +181,8 @@ function setSticker(index){
   stickerImage.classList.add('sticker-swap');
 }
 if(stickerButton)stickerButton.addEventListener('click',()=>setSticker(stickerIndex+1));
-if(stickerImage){
-  const stickerTimer=setInterval(()=>{
-    if(document.hidden)return;
-    setSticker(stickerIndex+1);
-  },9000);
-}
+// Sticker changes on click only. This avoids periodic image swaps and GIF decoding work
+// while the dashboard is idle.
 
 // v13.4 — fresh motivational quote on every app open
 const fallbackQuotes=[
@@ -171,17 +201,9 @@ function setDailyQuote(q,a){
  quote.textContent='“'+q+'”';
  if(author)author.textContent=a&&a!=='Unknown'?' — '+a:'';
 }
-async function loadDailyQuote(){
+function loadDailyQuote(){
  const local=fallbackQuotes[Math.floor(Math.random()*fallbackQuotes.length)];
  setDailyQuote(local[0],local[1]);
- try{
-   const controller=new AbortController(); const timer=setTimeout(()=>controller.abort(),3500);
-   const r=await fetch('https://dummyjson.com/quotes/random?cb='+Date.now(),{cache:'no-store',signal:controller.signal,headers:{'Accept':'application/json'}});
-   clearTimeout(timer);
-   if(!r.ok)throw Error('quote request failed');
-   const d=await r.json();
-   if(d&&typeof d.quote==='string'&&d.quote.trim())setDailyQuote(d.quote.trim(),typeof d.author==='string'?d.author.trim():'');
- }catch(_){/* keep local fallback so the top bar is never empty */}
 }
 loadDailyQuote();
 // v13.7 — Calm local music player
@@ -226,37 +248,6 @@ $('#themeCycle')?.addEventListener('click',()=>{const current=document.body.data
 const savedTheme=localStorage.getItem('mimi_theme')||'sage-green';
 applyTheme(savedTheme);setView('home');renderRecent();
 
-
-// Local Flask server status / reconnect control
-const serverStatus=$('#serverStatus'), serverStatusText=$('#serverStatusText');
-let serverOnline=true;
-function setServerStatus(online){
-  serverOnline=!!online;
-  if(!serverStatus)return;
-  serverStatus.classList.toggle('online',serverOnline);
-  serverStatus.classList.toggle('offline',!serverOnline);
-  serverStatusText.textContent=serverOnline?'Server Online':'Server Offline';
-  serverStatus.title=serverOnline?'MIMI Baby Studio server is running • Click to check again':'Server is not responding • Click to start/reconnect';
-  serverStatus.setAttribute('aria-label',serverStatus.title);
-}
-async function checkServerStatus(){
-  try{
-    const c=new AbortController(); const t=setTimeout(()=>c.abort(),1800);
-    const r=await fetch('/health?cb='+Date.now(),{cache:'no-store',signal:c.signal}); clearTimeout(t);
-    if(!r.ok)throw Error('offline');
-    setServerStatus(true);
-  }catch(_){setServerStatus(false)}
-}
-serverStatus?.addEventListener('click',()=>{
-  if(serverOnline){checkServerStatus(); return;}
-  // Registered by start.bat on Windows. It launches the silent local server.
-  try{window.location.href='mimibaby://start';}catch(_){ }
-  serverStatusText.textContent='Starting server…';
-  serverStatus.classList.remove('offline'); serverStatus.classList.add('starting');
-  setTimeout(checkServerStatus,1200); setTimeout(checkServerStatus,3000); setTimeout(checkServerStatus,6000);
-});
-checkServerStatus();
-setInterval(checkServerStatus,5000);
 
 // Soft UI click feedback. Kept deliberately short and quiet so it adds polish
 // without becoming distracting during normal work.

@@ -1,17 +1,17 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#eef2e9"><title>MIMI Baby Studio • Work Toolkit</title><link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#eef2e9"><link rel="icon" type="image/png" href="{{ url_for('static',filename='mimi-logo-256.png') }}"><title>MIMI Baby Studio</title><link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}"></head>
 <body>
 <div class="bg-orb one"></div><div class="bg-orb two"></div>
 <div class="app">
 <div class="windowbar">
   <div class="window-controls"><i></i><i></i><i></i></div>
   <div class="window-title quote-bar" aria-live="polite"><span>✦</span><span id="dailyQuote">Loading a little inspiration…</span><b id="dailyQuoteAuthor"></b></div>
-  <div class="window-tools top-actions"><button class="server-status online" id="serverStatus" type="button" title="Check server status" aria-live="polite"><i></i><span id="serverStatusText">Server Online</span></button><button class="window-comfort" id="themeCycle" type="button" title="Change Eye Comfort theme" aria-label="Change Eye Comfort theme">🌿</button></div>
+  <div class="window-tools top-actions"><button class="window-comfort" id="themeCycle" type="button" title="Change Eye Comfort theme" aria-label="Change Eye Comfort theme">🌿</button></div>
 </div>
 <div class="app-body">
 <aside class="sidebar">
-  <div class="brand"><div class="logo">♡</div><div><b>MIMI Baby Studio</b><small>WORK TOOLKIT</small></div></div>
+  <div class="brand"><img class="logo" src="{{ url_for('static',filename='mimi-logo-256.png') }}" alt="MIMI Baby Studio logo"><div><b>MIMI Baby Studio</b><small>VIDEO &amp; IMAGE → PDF</small></div></div>
   <div class="nav-title">MENU</div>
   <button class="nav active" data-view="home"><span class="ico">⌂</span><span><b>Home</b><small>Your workspace</small></span></button>
   <button class="nav" data-tool="video"><span class="ico">▶</span><span><b>Video → PDF</b><small>Frame extraction</small></span></button>
@@ -34,6 +34,7 @@
 <main>
 <header class="topbar"><div class="topbar-title"><small class="crumb">MIMI Baby Studio / <span id="crumbPage">HOME</span></small><h1 id="title">Your workspace</h1></div></header>
 
+<div id="viewStack" class="view-stack">
 <div id="homeView" class="view active-view">
   <section class="dashboard-welcome">
     <div class="welcome-copy">
@@ -116,16 +117,18 @@
   </div>
   <div class="bottom-row"><div id="preview" class="preview"><span class="preview-icon">✦</span><span><b>Preview</b><small>Your selected file will appear here</small></span></div><button id="convertBtn" class="create" type="submit"><span>✦</span> Create My PDF <i>→</i></button></div>
  </form>
- <div id="progressWrap" class="progress hidden"><div><span id="progressText">Preparing…</span><b id="progressPercent">0%</b></div><div class="track"><i id="progressBar"></i></div></div>
- <div id="consoleWrap" class="console-wrap hidden"><div class="console-head"><span><i></i> FFmpeg Console</span><button type="button" id="clearConsole">Clear</button></div><pre id="consoleBox">Waiting for FFmpeg…</pre></div>
+ <div id="progressWrap" class="progress hidden"><div><span id="progressText">Preparing…</span><b id="progressPercent">0%</b></div><div class="track"><i id="progressBar"></i></div></div></div>
  <div id="errorBox" class="error hidden"></div>
-</section>
 <footer>🔒 Private processing · Files are processed on your computer only.</footer>
 </div>
 
-<div id="historyView" class="view hidden"><section class="page-card"><div class="page-card-head"><div><span class="eyebrow">YOUR ACTIVITY</span><h2>Conversion history</h2><p>Recent PDFs created with MIMI Baby Studio.</p></div><button class="danger-btn" id="clearHistory">Clear history</button></div><div id="historyList" class="history-list"></div></section></div>
+<div id="historyView" class="view hidden subpage-view">
+  <div class="subpage-header"><div><span class="eyebrow">YOUR ACTIVITY</span><h2>Conversion history</h2><p>Recent PDFs created with MIMI Baby Studio.</p></div><button class="danger-btn" id="clearHistory">Clear history</button></div>
+  <div id="historyList" class="history-list"></div>
+</div>
 
-<div id="settingsView" class="view hidden"><section class="page-card"><div class="page-card-head"><div><span class="eyebrow">PERSONALIZE</span><h2>Settings</h2><p>Make the toolkit feel the way you like it.</p></div></div><div class="settings-list">
+<div id="settingsView" class="view hidden subpage-view">
+  <div class="subpage-header"><div><span class="eyebrow">PERSONALIZE</span><h2>Settings</h2><p>Make the toolkit feel the way you like it.</p></div></div><div class="settings-list">
  <div class="appearance-block"><div class="appearance-title"><div><b>Eye Comfort Collection</b><small>Five calm, low-glare palettes designed for comfortable longer sessions.</small></div><span class="theme-current" id="themeCurrent">Sage Green</span></div><div class="theme-grid" id="themeGrid">
    <div class="theme-card selected" data-theme="sage-green"><span class="theme-preview sage-green"><i></i><i></i><i></i></span><div class="theme-card-copy"><strong>1. Sage Green</strong><small>Fresh · Natural · Balanced</small></div></div>
    <div class="theme-card" data-theme="warm-beige"><span class="theme-preview warm-beige"><i></i><i></i><i></i></span><div class="theme-card-copy"><strong>2. Warm Beige</strong><small>Warm · Gentle · Cozy</small></div></div>
@@ -133,10 +136,11 @@
    <div class="theme-card" data-theme="lavender"><span class="theme-preview lavender"><i></i><i></i><i></i></span><div class="theme-card-copy"><strong>4. Lavender</strong><small>Soft · Dreamy · Relaxed</small></div></div>
    <div class="theme-card" data-theme="warm-olive"><span class="theme-preview warm-olive"><i></i><i></i><i></i></span><div class="theme-card-copy"><strong>5. Warm Olive</strong><small>Earthy · Muted · Calm</small></div></div>
  </div><div class="appearance-note">🌿 All five are part of the Eye Comfort family: soft colors, reduced saturation, gentle contrast and low-glare surfaces. Choose whichever feels easiest on your eyes. This changes the visual presentation only; it does not reduce blue light emitted by your monitor.</div></div>
- <div class="pref"><div><b>Local processing</b><small>Video and image files are processed locally with Flask, FFmpeg and Pillow.</small></div><span class="status-pill">✓ Enabled</span></div>
- <div class="pref"><div><b>Windows AutoStart</b><small>The background server can launch automatically when Windows starts.</small></div><span class="status-pill">✓ Ready</span></div>
- <div class="pref"><div><b>About MIMI Baby Studio</b><small>Work Toolkit · Video → PDF · Images → PDF</small></div><span class="version-pill">v2</span></div>
- </div></section></div>
+ <div class="pref"><div><b>100% Local Processing</b><small>Video and image files are processed entirely on this PC. Nothing is uploaded to a remote server.</small></div><span class="status-pill">✓ Enabled</span></div>
+ <div class="pref about-pref"><div><b>About MIMI Baby Studio</b><small>Work Toolkit · Video → PDF · Images → PDF</small><a class="github-link" href="https://github.com/NavajyotiBayan/MIMI-Baby-Studio" target="_blank" rel="noopener noreferrer">View GitHub Repository ↗</a></div><span class="version-pill">v2.0.0</span></div>
+ </div></div>
+
+</div>
 </main></div>
 </div>
 <div id="startModal" class="modal start-modal hidden" role="dialog" aria-modal="true" aria-labelledby="startModalTitle">
@@ -185,8 +189,8 @@
     <div class="completion-step done current"><span>✓</span><small>Complete</small></div>
   </div>
   <div class="success-file"><span class="success-file-icon">PDF</span><div class="success-file-main"><b id="successFileName">Your PDF.pdf</b><small id="successFileMeta">Ready to view · Size calculating… · Just now</small></div><span class="success-check">✓</span></div>
-  <div class="success-actions"><a id="openPdfLink" class="download primary-action" href="#" target="_blank" rel="noopener">Open PDF <span>↗</span></a><a id="downloadLink" class="download secondary-action" href="#">Download <span>↓</span></a></div>
-  <button id="convertAnother" class="another-action" type="button">Create another PDF <span>→</span></button>
+  <div class="success-actions"><a id="openPdfLink" class="download primary-action" href="#">Open PDF <span>↗</span></a><a id="downloadLink" class="download secondary-action" href="#">Save PDF <span>↓</span></a></div>
+  <div class="success-extra-actions"><button id="openPdfFolder" class="another-action" type="button">Open PDF folder <span>↗</span></button><button id="convertAnother" class="another-action" type="button">Create another PDF <span>→</span></button></div>
   <div class="love">Nobi Loves You More <span>♥</span></div>
   <small class="success-note">🔒 100% local · Your files never leave this PC</small>
 </div></div>

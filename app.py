@@ -3,26 +3,23 @@ from pathlib import Path
 from flask import Flask, render_template, request, jsonify, send_file
 
 BASE=Path(__file__).resolve().parent
-TEMP=BASE/'temp'; TEMP.mkdir(exist_ok=True)
+# Development uses a local temp folder; packaged builds point this to a writable user-data folder.
+DATA_ROOT=Path(os.environ.get('MIMI_DATA_DIR', str(BASE/'temp'))).resolve()
+TEMP=DATA_ROOT; TEMP.mkdir(parents=True, exist_ok=True)
 app=Flask(__name__); app.config['MAX_CONTENT_LENGTH']=2*1024*1024*1024
 jobs={}
 
 # Prevent FFmpeg/FFprobe from opening a Windows console window.
 NO_WINDOW = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
 
-def job_log(job_id, text):
-    text=str(text).strip()
-    if not text: return
-    j=jobs.get(job_id)
-    if j is None: return
-    logs=j.setdefault('logs', [])
-    logs.append(text)
-    if len(logs)>180: del logs[:-180]
-
 VIDEO_EXT={'.mp4','.mkv','.mov','.avi','.webm','.m4v'}
 IMAGE_EXT={'.jpg','.jpeg','.png','.webp','.bmp','.tif','.tiff'}
 
 def find_ffmpeg():
+    # Prefer the private runtime bundled with the desktop app.
+    runtime_root = Path(os.environ.get('MIMI_RUNTIME_DIR', str(BASE/'runtime'))).resolve()
+    bundled = runtime_root/'ffmpeg'/'bin'/'ffmpeg.exe'
+    if bundled.exists(): return str(bundled)
     exe=shutil.which('ffmpeg')
     if exe:return exe
     roots=[Path(os.path.expandvars(r'%LOCALAPPDATA%/Microsoft/WinGet/Links')),Path(os.path.expandvars(r'%LOCALAPPDATA%/Microsoft/WinGet/Packages')),Path(r'C:/ffmpeg/bin')]
@@ -36,6 +33,28 @@ def safe_name(name, fallback):
     name=(name or '').strip()
     name=re.sub(r'[<>:"/\\|?*\x00-\x1f]','_',name).strip('. ')
     return (name or fallback)[:150]
+
+def persist_job(job_id, output, filename):
+    import json
+    meta=TEMP/job_id/'job.json'
+    meta.write_text(json.dumps({
+'job_id':job_id, 'output':str(output), 'filename':filename,
+'filesize':output.stat().st_size if output.exists() else 0
+    }), encoding='utf-8')
+
+def load_persisted_job(job_id):
+    import json
+    meta=TEMP/job_id/'job.json'
+    output=TEMP/job_id/'converted.pdf'
+    if not meta.exists() or not output.exists(): return None
+    try:
+        data=json.loads(meta.read_text(encoding='utf-8'))
+        if data.get('output') and Path(data['output']).resolve()!=output.resolve(): return None
+        return {'status':'done','progress':100,'message':'PDF ready','output':str(output),
+                'filename':data.get('filename', f'{job_id}.pdf'),'filesize':output.stat().st_size,
+                'download':f'/download/{job_id}'}
+    except Exception:
+        return None
 
 def fit_image(img, box_w, box_h, mode='fit'):
     from PIL import Image
@@ -78,6 +97,7 @@ def build_image_pdf(job_id, paths, settings):
         output=work/'converted.pdf'
         pages[0].save(output,'PDF',resolution=150.0,save_all=True,append_images=pages[1:])
         jobs[job_id].update(status='done',progress=100,message='PDF ready',output=str(output),filename=settings['filename']+'.pdf',filesize=output.stat().st_size)
+        persist_job(job_id, output, settings['filename']+'.pdf')
     except Exception as e:
         jobs[job_id].update(status='error',message=str(e))
 
@@ -86,17 +106,14 @@ def build_video_pdf(job_id, video_path, settings):
     work=TEMP/job_id; frames=work/'frames'; frames.mkdir(parents=True,exist_ok=True)
     jobs[job_id].update(status='extracting',message='Extracting video frames…',progress=3)
     ffmpeg=find_ffmpeg()
-    if not ffmpeg: jobs[job_id].update(status='error',message='FFmpeg was not found. Run start.bat again.'); return
+    if not ffmpeg: jobs[job_id].update(status='error',message='FFmpeg was not found. Restart MIMI Baby Studio to repair the FFmpeg runtime.'); return
     interval=float(settings['interval']); pattern=str(frames/'frame_%06d.jpg')
-    job_log(job_id, f'FFmpeg: {Path(ffmpeg).name}')
-    job_log(job_id, f'Input: {video_path.name}')
     try:
         probe=subprocess.run([ffmpeg,'-hide_banner','-v','error','-show_entries','format=duration','-of','default=noprint_wrappers=1:nokey=1','-i',str(video_path)],capture_output=True,text=True,creationflags=NO_WINDOW)
         duration=float(probe.stdout.strip() or 0)
     except Exception:
         duration=0
-    cmd=[ffmpeg,'-hide_banner','-loglevel','warning','-stats_period','0.5','-progress','pipe:1','-y','-i',str(video_path),'-vf',f'fps=1/{interval}','-q:v','2',pattern]
-    job_log(job_id, 'Starting frame extraction…')
+    cmd=[ffmpeg,'-hide_banner','-loglevel','error','-nostats','-progress','pipe:1','-y','-i',str(video_path),'-vf',f'fps=1/{interval}','-q:v','2',pattern]
     try:
         proc=subprocess.Popen(cmd,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,bufsize=1,creationflags=NO_WINDOW)
         last_time=0.0
@@ -115,13 +132,11 @@ def build_video_pdf(job_id, video_path, settings):
                 continue
             if line.startswith(('frame=', 'fps=', 'size=', 'time=', 'bitrate=', 'speed=')):
                 continue
-            job_log(job_id,line)
         rc=proc.wait()
     except Exception as e:
-        jobs[job_id].update(status='error',message='Could not start FFmpeg: '+str(e)); job_log(job_id,'ERROR: '+str(e)); return
+        jobs[job_id].update(status='error',message='Could not start FFmpeg: '+str(e)); return
     if rc!=0:
-        jobs[job_id].update(status='error',message='FFmpeg failed. See the console below for details.'); return
-    job_log(job_id,'Frame extraction complete.')
+        jobs[job_id].update(status='error',message='FFmpeg could not process this video.'); return
     files=sorted(frames.glob('frame_*.jpg'))
     if not files: jobs[job_id].update(status='error',message='No frames were extracted.'); return
     jobs[job_id].update(status='building',message='Building your PDF…',progress=35)
@@ -141,6 +156,7 @@ def build_video_pdf(job_id, video_path, settings):
         pages.append(page); jobs[job_id]['progress']=int(35+(start+len(batch))/total*60)
     output=work/'converted.pdf'; pages[0].save(output,'PDF',resolution=150.0,save_all=True,append_images=pages[1:])
     jobs[job_id].update(status='done',progress=100,message='PDF ready',output=str(output),filename=settings['filename']+'.pdf',filesize=output.stat().st_size)
+    persist_job(job_id, output, settings['filename']+'.pdf')
 
 @app.route('/cleanup', methods=['POST'])
 def cleanup():
@@ -178,7 +194,7 @@ def convert():
             if ext not in IMAGE_EXT:return jsonify(error=f'Unsupported image format: {ext}'),400
             p=work/f'{i:05d}{ext}'; f.save(p); saved.append(p)
         settings={'page_size':request.form.get('page_size','A4'),'orientation':request.form.get('orientation','portrait'),'per_page':request.form.get('per_page','1'),'fit':request.form.get('fit','fit'),'margins':request.form.get('margins','medium'),'filename':safe_name(request.form.get('output_name'),'Mimi_Baby_Document')}
-        jobs[job_id]={'status':'queued','progress':0,'message':'Starting…','logs':[]}
+        jobs[job_id]={'status':'queued','progress':0,'message':'Starting…'}
         threading.Thread(target=build_image_pdf,args=(job_id,saved,settings),daemon=True).start()
         return jsonify(job_id=job_id)
     f=request.files.get('video')
@@ -190,13 +206,18 @@ def convert():
     if interval<0.1 or interval>3600:return jsonify(error='Invalid frame interval.'),400
     p=work/('input'+ext); f.save(p)
     settings={'interval':interval,'per_page':per,'orientation':request.form.get('orientation','landscape'),'timestamps':request.form.get('timestamps')=='on','filename':safe_name(request.form.get('output_name'),Path(f.filename).stem)}
-    jobs[job_id]={'status':'queued','progress':0,'message':'Starting…','logs':[]}
+    jobs[job_id]={'status':'queued','progress':0,'message':'Starting…'}
     threading.Thread(target=build_video_pdf,args=(job_id,p,settings),daemon=True).start()
     return jsonify(job_id=job_id)
 
 @app.route('/status/<job_id>')
 def status(job_id):
-    if job_id not in jobs:return jsonify(error='Job not found'),404
+    if job_id not in jobs:
+        restored=load_persisted_job(job_id)
+        if restored is not None:
+            jobs[job_id]=restored
+        else:
+            return jsonify(error='Job not found'),404
     j=jobs[job_id].copy()
     if j.get('status')=='done':j['download']=f'/download/{job_id}'
     return jsonify(j)
@@ -204,7 +225,14 @@ def status(job_id):
 @app.route('/download/<job_id>')
 def download(job_id):
     j=jobs.get(job_id)
-    if not j or j.get('status')!='done':return 'PDF is not ready.',404
-    return send_file(j['output'],as_attachment=True,download_name=j['filename'],mimetype='application/pdf')
+    if not j:
+        j=load_persisted_job(job_id)
+        if j is not None: jobs[job_id]=j
+    if not j or j.get('status')!='done':return 'PDF is not available anymore.',404
+    output=Path(j.get('output',''))
+    if not output.exists(): return 'PDF is not available anymore.',404
+    return send_file(output,as_attachment=True,download_name=j['filename'],mimetype='application/pdf')
 
-if __name__=='__main__': app.run(host='127.0.0.1',port=5000,debug=False)
+if __name__=='__main__':
+    port=int(os.environ.get('MIMI_PORT','5000'))
+    app.run(host='127.0.0.1',port=port,debug=False)

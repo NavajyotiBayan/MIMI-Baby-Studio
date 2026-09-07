@@ -1,0 +1,55 @@
+name: Windows Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Build Windows packages
+        shell: powershell
+        run: .\scripts\build_windows.ps1
+
+      - name: Verify release files
+        shell: powershell
+        run: |
+          $setup = Get-ChildItem .\dist -Filter '*-Setup.exe' | Select-Object -First 1
+          $portable = Get-ChildItem .\dist -Filter '*-Portable.exe' | Select-Object -First 1
+          if (-not $setup) { throw 'Setup.exe was not produced.' }
+          if (-not $portable) { throw 'Portable.exe was not produced.' }
+          Write-Host "Setup: $($setup.Name)"
+          Write-Host "Portable: $($portable.Name)"
+
+      - name: Create SHA256SUMS.txt
+        shell: powershell
+        run: |
+          $files = Get-ChildItem .\dist -File | Where-Object { $_.Name -match '-(Setup|Portable)\.exe$' }
+          foreach ($file in $files) {
+            $hash = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($file.Name)" | Out-File .\dist\SHA256SUMS.txt -Append -Encoding ascii
+          }
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/*-Setup.exe
+            dist/*-Portable.exe
+            dist/SHA256SUMS.txt

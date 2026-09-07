@@ -1,66 +1,23 @@
-# MIMI Baby Studio — One-command installation
+# MIMI Baby Studio — One-command installer
 
-MIMI Baby Studio can be installed on Windows with:
-
-```powershell
-irm navajyoti.online/mimibaby | iex
-```
-
-The application remains the supplied MIMI Baby Studio v2 project. The `cloudflare-worker` folder adds the Cloudflare Worker endpoint that serves the PowerShell installer.
-
-## Installation flow
-
-1. PowerShell requests `navajyoti.online/mimibaby`.
-2. Cloudflare Worker returns `installer.ps1` as plain text.
-3. PowerShell downloads the current `main` branch ZIP from GitHub.
-4. The ZIP is extracted to a temporary directory.
-5. The existing `start.bat` is launched.
-6. `start.bat` handles Administrator elevation, Python/FFmpeg setup, installation to `C:\MIMI Baby Studio`, background startup, and browser launch.
-
-## GitHub repository
-
-The installer is configured for:
-
-```text
-https://github.com/NavajyotiBayan/MIMI-Baby-Studio
-```
-
-The download URL used by the installer is:
+The public installer command is:
 
 ```powershell
-$MimiDownloadUrl = 'https://github.com/NavajyotiBayan/MIMI-Baby-Studio/archive/refs/heads/main.zip'
+irm https://mimibaby.navajyoti.online | iex
 ```
 
-Keep the repository public if you want the installer to download it without GitHub authentication.
+The custom domain is expected to be backed by a Cloudflare Worker that returns the repository's root `install.ps1` as plain text.
 
-## Cloudflare route
+`install.ps1` then:
 
-Create a Worker route:
+1. Queries the latest GitHub Release for `NavajyotiBayan/MIMI-Baby-Studio`.
+2. Finds the `MIMI-Baby-Studio-*-Setup.exe` asset.
+3. Downloads that Windows installer to a temporary directory.
+4. Starts the installer.
+5. Lets the normal Windows installer handle installation/elevation.
 
-```text
-navajyoti.online/mimibaby
-```
+This keeps the public command short while keeping release binaries out of the source repository.
 
-The Worker project intentionally does not define the route in `wrangler.jsonc`, because the route is managed in the Cloudflare dashboard.
+## Cloudflare Worker requirement
 
-## Deploy the Worker
-
-From `cloudflare-worker`:
-
-```powershell
-npm install
-npx wrangler login
-npx wrangler deploy
-```
-
-Then test:
-
-```powershell
-irm navajyoti.online/mimibaby
-```
-
-It should output the PowerShell installer text. After that, the full install command is:
-
-```powershell
-irm navajyoti.online/mimibaby | iex
-```
+The Worker only needs to return the current contents of `install.ps1` for `/` and can reject other paths. No application files or Windows binaries should be stored in the Worker.

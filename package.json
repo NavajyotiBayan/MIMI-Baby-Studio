@@ -1,0 +1,80 @@
+{
+  "name": "mimi-baby-studio",
+  "productName": "MIMI Baby Studio",
+  "version": "2.0.0",
+  "description": "Private Windows desktop app for converting videos and images into PDF documents",
+  "main": "electron/main.js",
+  "author": "Navajyoti Bayan",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis portable"
+  },
+  "devDependencies": {
+    "electron": "37.10.3",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "online.navajyoti.mimibabystudio",
+    "productName": "MIMI Baby Studio",
+    "asar": true,
+    "asarUnpack": [
+      "app.py",
+      "templates/**",
+      "static/**"
+    ],
+    "files": [
+      "app.py",
+      "package.json",
+      "electron/**",
+      "templates/**",
+      "static/**",
+      "LICENSE",
+      "THIRD-PARTY-NOTICES.md",
+      "!runtime/**",
+      "!docs/**",
+      "!scripts/**",
+      "!*.bat",
+      "!install.ps1",
+      "!README*",
+      "!CONTRIBUTING.md",
+      "!SECURITY.md",
+      "!requirements.txt"
+    ],
+    "extraResources": [
+      {
+        "from": "runtime/python",
+        "to": "runtime/python"
+      },
+      {
+        "from": "runtime/ffmpeg",
+        "to": "runtime/ffmpeg"
+      }
+    ],
+    "win": {
+      "icon": "electron/mimi-baby-studio.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "artifactName": "MIMI-Baby-Studio-${version}-Setup.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MIMI Baby Studio",
+      "deleteAppDataOnUninstall": false
+    },
+    "portable": {
+      "artifactName": "MIMI-Baby-Studio-${version}-Portable.exe"
+    },
+    "compression": "maximum",
+    "removePackageScripts": true,
+    "electronLanguages": [
+      "en-US"
+    ]
+  }
+}
