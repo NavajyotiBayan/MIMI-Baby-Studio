@@ -2,7 +2,7 @@
 
 This folder contains the production `install.ps1` intended to be served by the Cloudflare Worker.
 
-PowerShell command:
+PowerShell/Terminal Run as Administrator command:
 
 ```powershell
 irm https://mimibaby.navajyoti.online | iex
